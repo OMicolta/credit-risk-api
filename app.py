@@ -27,17 +27,40 @@ from feature_engineering import apply_feature_engineering
 # ============================================
 # CARGAR ARTEFACTOS DEL MODELO
 # ============================================
+import os
+import sys
+import traceback
+
+model = None
+scaler = None
+feature_names = None
+load_error = None
+
 try:
-    model = joblib.load('modelo_credito.pkl')
-    scaler = joblib.load('scaler.pkl')
-    with open('features.json', 'r') as f:
+    # Obtener directorio del script
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    model_path = os.path.join(BASE_DIR, 'modelo_credito.pkl')
+    scaler_path = os.path.join(BASE_DIR, 'scaler.pkl')
+    features_path = os.path.join(BASE_DIR, 'features.json')
+
+    print(f"📁 Directorio base: {BASE_DIR}", file=sys.stderr)
+    print(f"📁 Archivos en directorio: {os.listdir(BASE_DIR)}", file=sys.stderr)
+
+    model = joblib.load(model_path)
+    print("✅ Modelo cargado", file=sys.stderr)
+
+    scaler = joblib.load(scaler_path)
+    print("✅ Scaler cargado", file=sys.stderr)
+
+    with open(features_path, 'r') as f:
         feature_names = json.load(f)
-    print("✅ Modelo y artefactos cargados correctamente")
+    print(f"✅ Features cargadas: {len(feature_names)}", file=sys.stderr)
+
 except Exception as e:
-    print(f"❌ Error cargando artefactos: {e}")
-    model = None
-    scaler = None
-    feature_names = None
+    load_error = f"{type(e).__name__}: {str(e)}"
+    print(f"❌ Error cargando artefactos: {load_error}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
 
 # ============================================
 # CONFIGURACIÓN DE LA API
@@ -192,7 +215,7 @@ async def root():
 async def health_check():
     """Verificar estado de salud de la API"""
     if model is None:
-        raise HTTPException(status_code=503, detail="Modelo no cargado")
+        raise HTTPException(status_code=503, detail=f"Modelo no cargado: {load_error}")
     return {
         "status": "healthy",
         "model_loaded": True,
