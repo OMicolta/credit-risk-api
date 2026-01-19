@@ -63,6 +63,16 @@ except Exception as e:
     traceback.print_exc(file=sys.stderr)
 
 # ============================================
+# CONFIGURACIÓN DE MONEDA (COP)
+# ============================================
+# Factor de conversión: el modelo fue entrenado con valores ~25x menores que COP
+# Ejemplo: $7,500,000 COP / 25 = 300,000 (valor que entiende el modelo)
+COP_CONVERSION_FACTOR = 25
+
+# Campos monetarios que requieren conversión
+MONETARY_FIELDS = ['AMT_INCOME_TOTAL', 'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE']
+
+# ============================================
 # CONFIGURACIÓN DE LA API
 # ============================================
 app = FastAPI(
@@ -86,13 +96,13 @@ app.add_middleware(
 # ESQUEMAS DE DATOS (Pydantic)
 # ============================================
 class ClienteInput(BaseModel):
-    """Datos de entrada del cliente para predicción"""
-    
-    # Información del préstamo
-    AMT_INCOME_TOTAL: float = Field(..., description="Ingreso total del cliente", example=150000)
-    AMT_CREDIT: float = Field(..., description="Monto del crédito solicitado", example=500000)
-    AMT_ANNUITY: float = Field(..., description="Anualidad del préstamo", example=25000)
-    AMT_GOODS_PRICE: float = Field(..., description="Precio del bien a comprar", example=450000)
+    """Datos de entrada del cliente para predicción (valores en COP)"""
+
+    # Información del préstamo (en COP)
+    AMT_INCOME_TOTAL: float = Field(..., description="Ingreso mensual en COP", example=7500000)
+    AMT_CREDIT: float = Field(..., description="Monto del crédito solicitado en COP", example=10000000)
+    AMT_ANNUITY: float = Field(..., description="Cuota mensual en COP", example=500000)
+    AMT_GOODS_PRICE: float = Field(..., description="Precio del bien en COP", example=9500000)
     
     # Información personal
     DAYS_BIRTH: int = Field(..., description="Días desde nacimiento (negativo)", example=-12000)
@@ -123,12 +133,12 @@ class ClienteInput(BaseModel):
     OBS_60_CNT_SOCIAL_CIRCLE: float = Field(0, description="Observaciones 60 días", example=2)
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
-                "AMT_INCOME_TOTAL": 150000,
-                "AMT_CREDIT": 500000,
-                "AMT_ANNUITY": 25000,
-                "AMT_GOODS_PRICE": 450000,
+                "AMT_INCOME_TOTAL": 7500000,
+                "AMT_CREDIT": 10000000,
+                "AMT_ANNUITY": 500000,
+                "AMT_GOODS_PRICE": 9500000,
                 "DAYS_BIRTH": -12000,
                 "DAYS_EMPLOYED": -2000,
                 "DAYS_REGISTRATION": -5000,
@@ -161,16 +171,29 @@ class PrediccionOutput(BaseModel):
 # ============================================
 # FUNCIONES AUXILIARES
 # ============================================
+def convertir_cop_a_modelo(data: dict) -> dict:
+    """Convierte valores monetarios de COP a la escala del modelo"""
+    data_convertido = data.copy()
+    for field in MONETARY_FIELDS:
+        if field in data_convertido and data_convertido[field] is not None:
+            data_convertido[field] = data_convertido[field] / COP_CONVERSION_FACTOR
+    return data_convertido
+
+
 def preparar_datos(cliente: ClienteInput) -> pd.DataFrame:
     """Convierte input del cliente a DataFrame con Feature Engineering"""
-    
+
     # Crear DataFrame con los datos de entrada
     data = cliente.dict()
+
+    # Convertir valores COP a escala del modelo
+    data = convertir_cop_a_modelo(data)
+
     df = pd.DataFrame([data])
-    
+
     # Aplicar Feature Engineering
     df = apply_feature_engineering(df)
-    
+
     return df
 
 
